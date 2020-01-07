@@ -2,19 +2,19 @@
 const {app, BrowserWindow, ipcMain} = require('electron')
 const storage = require('electron-json-storage');
 
-var c29s = require('./c29s_nowasm.js');
-var verify_c29s = c29s.cwrap('c29s_verify', 'number', ['array','number','array']);
-var check_diff = c29s.cwrap('check_diff', 'number', ['number','array']);
+var c29v = require('./c29v.js');
+var verify_c29v = c29v.cwrap('c29v_verify', 'number', ['array','number','array']);
+var check_diff = c29v.cwrap('check_diff', 'number', ['number','array']);
 var shares=0;
 var blocks=0;
 var conn=0;
 
 global.poolconfig = { 
-	poolport:0, 
+	poolport:10000, 
 	ctrlport:14651,// use with https://github.com/swap-dev/on-block-notify.git
-	daemonport:0,
-	daemonhost:'',
-	mining_address:''
+	daemonport:19281,
+	daemonhost:'127.0.0.1',
+	mining_address:'XvyVkGmkQvCQvn2DKiie5cBB7y9ZiLJzc4prSuSk6oGu9vJZVNM45LvXEX6uLPSrHVXH62ebDmJCRJQmvdMc9zom8nXCmdzxQp'
 };
 
 const http = require('http');
@@ -125,7 +125,7 @@ function hashrate(miner) {
 
 	miner.shares += miner.difficulty|0;
 
-	var hr = miner.shares*32/((Date.now()/1000|0)-miner.begin);
+	var hr = miner.shares*16/((Date.now()/1000|0)-miner.begin);
 
 	miner.gps = hr;
 	
@@ -177,7 +177,7 @@ function updateJob(reason,callback){
 			for (var minerId in connectedMiners){
 				var miner = connectedMiners[minerId];
 				miner.nonces = [];
-				var response2 = '{"id":"Stratum","jsonrpc":"2.0","method":"getjobtemplate","result":{"algo":"cuckaroo","edgebits":29,"proofsize":32,"noncebytes":4,"difficulty":'+miner.difficulty+',"height":'+current_height+',"job_id":'+seq()+',"pre_pow":"'+current_hashblob+miner.nextnonce()+'"},"error":null}';
+				var response2 = '{"id":"Stratum","jsonrpc":"2.0","method":"getjobtemplate","result":{"algo":"cuckarood","edgebits":29,"proofsize":32,"noncebytes":4,"difficulty":'+miner.difficulty+',"height":'+current_height+',"job_id":'+seq()+',"pre_pow":"'+current_hashblob+miner.nextnonce()+'"},"error":null}';
 				miner.socket.write(response2+"\n");
 			}
 		}
@@ -310,11 +310,11 @@ function handleClient(data,miner){
 		noncebuffer.writeUInt32BE(request.params.nonce,0);
 		var header = Buffer.concat([Buffer.from(current_hashblob, 'hex'),Buffer.from(miner.jobnonce,'hex'),noncebuffer]);
 			
-		if(verify_c29s(header,header.length,cycle)){
+		if(verify_c29v(header,header.length,cycle)){
 
 			var header_previous = Buffer.concat([Buffer.from(previous_hashblob, 'hex'),Buffer.from(miner.oldnonce,'hex'),noncebuffer]);
 			
-			if(verify_c29s(header_previous,header_previous.length,cycle)){
+			if(verify_c29v(header_previous,header_previous.length,cycle)){
 			
 				logger.info('wrong hash or very old ('+miner.login+') '+request.params.height);
 				return miner.respose(null,{code: -32502, message: "wrong hash"},request);
@@ -367,7 +367,7 @@ function handleClient(data,miner){
 	
 	if(request && request.method && request.method == "getjobtemplate") {
 		
-		return miner.respose({algo:"cuckaroo",edgebits:29,proofsize:32,noncebytes:4,difficulty:parseFloat(miner.difficulty),height:current_height,job_id:seq(),pre_pow:current_hashblob+miner.nextnonce()},null,request);
+		return miner.respose({algo:"cuckarood",edgebits:29,proofsize:32,noncebytes:4,difficulty:parseFloat(miner.difficulty),height:current_height,job_id:seq(),pre_pow:current_hashblob+miner.nextnonce()},null,request);
 	}
 	else{
 
@@ -396,7 +396,7 @@ let mainWindow;
 function createWindow () {
 	// Create the browser window.
 	mainWindow = new BrowserWindow({
-		title: 'Swap Micropool',
+		title: 'MoneroV Micropool',
 		width: 800,
 		height: 600,
 		minWidth: 800,
@@ -425,6 +425,25 @@ function createWindow () {
 		var sender = event.sender;
 		var arg0 = arg;
 		storage.has(arg0,function(error,haskey) {
+			if(error || !haskey)
+			{
+				if(arg0 === "mining_address") sender.send('get-reply', [arg0,global.poolconfig.mining_address]);
+				if(arg0 === "daemonport") sender.send('get-reply', [arg0,global.poolconfig.daemonport]);
+				if(arg0 === "daemonhost") sender.send('get-reply', [arg0,global.poolconfig.daemonhost]);
+				if(arg0 === "poolport") sender.send('get-reply', [arg0,global.poolconfig.poolport]);
+				if(arg0 === "mining_address") storage.set(arg0,global.poolconfig.mining_address);
+				if(arg0 === "daemonport") storage.set(arg0,global.poolconfig.daemonport);
+				if(arg0 === "daemonhost") storage.set(arg0,global.poolconfig.daemonhost);
+				if(arg0 === "poolport") storage.set(global.poolconfig.poolport);
+				count++;
+				if(count == 4) {
+					updateJob('init',function(){
+						server.listen(global.poolconfig.poolport,'0.0.0.0');
+						logger.info("start monerov micropool, port "+global.poolconfig.poolport);
+					});
+					setInterval(function(){updateJob('timer');}, 100);
+				}
+			}
 			if(!error && haskey)
 				storage.get(arg0,function(error,object) {
 					if(!error) sender.send('get-reply', [arg0,object]);
@@ -436,10 +455,11 @@ function createWindow () {
 					if(count == 4) {
 						updateJob('init',function(){
 							server.listen(global.poolconfig.poolport,'0.0.0.0');
-							logger.info("start swap micropool, port "+global.poolconfig.poolport);
+							logger.info("start monerov micropool, port "+global.poolconfig.poolport);
 						});
-						setInterval(function(){updateJob('timer');}, 100);}
-					});
+						setInterval(function(){updateJob('timer');}, 100);
+					}
+				});
 		});
 	});
 

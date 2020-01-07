@@ -1,16 +1,17 @@
 {
-  "name": "swap-micro-pool",
-  "version": "1.4.0",
-  "description": "A minimal Swap Pool",
+  "name": "monerov-micro-pool",
+  "version": "1.0.0",
+  "description": "A minimal MoneroV Pool",
   "main": "main.js",
   "scripts": {
     "start": "electron ."
   },
-  "repository": "https://github.com/swap-dev/micropool-gui",
-  "author": "sebseb7",
+  "repository": "https://github.com/xmvdev/micropool-gui",
+  "author": "xmvdev",
   "license": "0bsd",
   "devDependencies": {
-    "electron": "^4.0.6"
+    "electron": "^4.0.6",
+    "electron-builder": "^21.2.0"
   },
   "dependencies": {
     "electron-json-storage": "^4.1.6"
