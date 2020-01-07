@@ -1,6 +1,9 @@
 # micropool-gui
 Minimal MoneroV Pool Windows GUI
 
+
+![screenshot](https://github.com/xmvdev/micropool-gui/raw/master/screenshot.JPG)
+
 To run micropool-gui as a nodejs/electronjs app:
 
     $ npm install electron -g
